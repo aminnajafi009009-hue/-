@@ -129,6 +129,8 @@ from keyboards import (
 
 from keyboards import (
     admin_gift_audience_keyboard,
+    admin_search_mode_keyboard,
+    admin_search_results_keyboard,
     admin_gift_all_confirm_keyboard,
     admin_payg_category_pricing_keyboard,
     admin_payg_plan_pricing_keyboard,
@@ -285,7 +287,7 @@ def _permission_for_message_text(text: str | None) -> str | None:
         "🎁 تنظیمات رفرال": "referral_settings",
         "💳 تنظیمات کیف‌پول": "wallet_settings",
         "💳 روش‌های پرداخت": "payment_methods",
-        "📜 مدیریت لاگ‌ها": "log_settings",
+        "📜 مدیریت ��اگ‌ها": "log_settings",
     }
     return mapping.get(text or "")
 
@@ -1048,10 +1050,58 @@ async def admin_search_start(callback: types.CallbackQuery, state: FSMContext):
     if not _is_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
+    await state.clear()
     await callback.message.edit_text(
-        "🔍 آیدی عددی یا کد دعوت کاربر را ارسال کنید:", reply_markup=admin_back_button()
+        "🔍 جستجوی حرفه‌ای\n\nنحوهٔ جستجو را انتخاب کنید:",
+        reply_markup=admin_search_mode_keyboard(),
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("searchmode_"))
+async def admin_search_pick_mode(callback: types.CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    mode = callback.data.replace("searchmode_", "")
+    prompts = {
+        "id":     "🔢 آیدی عددی تلگرام کاربر را وارد کنید:",
+        "name":   "👤 بخشی از نام کاربر را وارد کنید (حداقل ۲ حرف):",
+        "invite": "🎟 کد دعوت کاربر را وارد کنید:",
+        "all":    "🔎 عبارتی وارد کنید (نام، آیدی یا کد دعوت):",
+    }
+    await state.update_data(search_mode=mode)
     await state.set_state(AdminStates.waiting_search_user)
+    await callback.message.edit_text(prompts.get(mode, prompts["all"]))
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("searchopen_"))
+async def admin_search_open_user(callback: types.CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+    uid = callback.data.replace("searchopen_", "")
+    user = db.get_user(uid)
+    if user is None:
+        await callback.answer("❌ کاربر یافت نشد.", show_alert=True)
+        return
+    stats = db.get_referral_stats(user["id"])
+    text = (
+        f"👤 {user['name']}\n"
+        f"🆔 {user['telegram_id']}\n\n"
+        f"👛 کیف پول آزاد: {user['wallet']:,} تومان\n"
+        f"🔒 کیف پول مسدود: {user['locked_wallet']:,} تومان\n"
+        f"🛒 کل خرید: {user['total_purchase']:,} تومان\n"
+        f"📅 عضویت: {user['joined']}\n\n"
+        f"🔗 کد دعوت: {user['invite_code']}\n"
+        f"👥 دعوت: {stats['invited_count']} | موفق: {stats['successful_invites']}"
+    )
+    await _reply_with_user_actions(
+        callback.message, text, user["telegram_id"],
+        db.is_user_blocked(user["telegram_id"]), edit=True
+    )
+    await state.clear()
     await callback.answer()
 
 
@@ -1243,7 +1293,7 @@ async def approve_purchase(callback: types.CallbackQuery):
     order_id = db.create_order(user["id"], plan_key, plan["name"], plan_type(plan_key), price)
 
     # تأیید کارت‌به‌کارت = پرداخت واقعی و موفق؛ بنابراین فقط بعد از ساخت
-    # سفارشِ همین خرید، پاداش دعو�� را آزاد می‌کنیم.
+    # سفارشِ همین خرید، پاداش دعو�� ر�� آزاد می‌کنیم.
     if price > 0 and plan_key != FREE_TEST_PLAN_KEY:
         try:
             db.complete_referral(user["id"], qualifying_order_id=order_id)
@@ -1625,7 +1675,7 @@ async def send_config_qr_wrong_format(message: types.Message):
 async def send_config_link_received(message: types.Message, state: FSMContext):
     sub_link = (message.text or "").strip()
     if not sub_link.lower().startswith(("http://", "https://")):
-        await message.answer("❌ این یک لینک معتبر ن��ست؛ لطفاً لینک ساب رو با http یا https ارسال کن:")
+        await message.answer("❌ این یک لینک معتبر ن��ست؛ لطفاً لینک ساب رو با http یا https ارسا�� کن:")
         return
 
     data = await state.get_data()
@@ -2372,7 +2422,7 @@ async def ui_cbtn_text_input(message: types.Message, state: FSMContext):
     text = (message.text or "").strip()
     if not screen_key or screen_key not in _ui_editor.SCREENS:
         await state.clear()
-        await message.answer("❌ این مسیر منقضی شده؛ دوباره از ویرایشگر شروع کن.")
+        await message.answer("❌ این مسیر منقضی ��ده؛ دوباره از ویرایشگر شروع کن.")
         return
     if not text:
         await message.answer("❌ متن دکمه خالی است. دوباره بفرست:")
@@ -2620,7 +2670,7 @@ async def admin_orders_on(callback: types.CallbackQuery):
             sent += 1
         except Exception:
             failed += 1
-    await status_msg.edit_text(f"🟢 بخش سفارشات روشن شد. اطلاع‌رسانی به {sent} نفر موفق، {failed} نفر ناموفق.")
+    await status_msg.edit_text(f"🟢 بخش سفارشات روشن شد. اطلاع‌رسانی به {sent} نفر موفق، {failed} نفر ن��موفق.")
     await callback.message.edit_text("👨‍💻 پنل مدیریت:", reply_markup=_admin_panel_kb_for(callback.from_user.id))
     await callback.answer()
 
@@ -2827,7 +2877,7 @@ async def admin_wallet_edit_start(callback: types.CallbackQuery, state: FSMConte
     await state.update_data(wallet_edit_uid=uid)
     await state.set_state(AdminStates.waiting_wallet_edit_amount)
     await callback.message.answer(
-        f"✏️ ویرایش موجودی کیف‌پول «{user['name']}»\n\n"
+        f"✏️ ویرایش موجودی ک����ف‌پول «{user['name']}»\n\n"
         f"موجودی فعلی: {user['wallet']:,} تومان\n\n"
         "مقدار جدید را به تومان بفرست (موجودی دقیقاً روی همین عدد تنظیم می‌شود).\n"
         "برای کم/زیاد کردن نسبی می‌تونی از + یا - استفاده کنی، مثلاً: +50000 یا -20000\n\n"
@@ -3492,7 +3542,7 @@ async def admin_discount_edit_minorder_start(callback: types.CallbackQuery, stat
     await state.update_data(edit_discount_id=discount_id)
     await callback.message.edit_text(
         "✏️ حداقل مبلغ سفارش (به تومان) برای استفاده از این کد را وارد کنید.\n"
-        "برای برداشتن محدودیت، عدد 0 را ارسال کنید.",
+        "برای برداشت�� محدودیت، عدد 0 را ارسال کنید.",
         reply_markup=admin_back_button(),
     )
     await state.set_state(AdminStates.waiting_discount_edit_min_order)
@@ -3714,7 +3764,7 @@ async def admin_discount_edit_plans_start(callback: types.CallbackQuery, state: 
     selected = db._discount_plans(d) or []
     await state.update_data(edit_discount_id=discount_id, edit_discount_plans=selected)
     await callback.message.edit_text(
-        "🎯 پلن‌های مجاز برای این کد را انتخاب کنید (هرکدام را بزنید تا انتخاب/لغو شود):",
+        "🎯 پلن‌های مجاز برای این کد را انتخاب کنید (هرک��ام را بزنید تا انتخاب/لغو شود):",
         reply_markup=discount_plans_edit_keyboard(discount_id, selected),
     )
     await callback.answer()
@@ -4380,7 +4430,7 @@ async def admin_vip_category_detail(callback: types.CallbackQuery):
         await callback.answer("❌ این دسته یافت نشد.", show_alert=True)
         return
     plans = db.get_vip_plans(cat["id"])
-    text = f"🗂 {cat['name']}\n\n📦 تعداد پلن: {len(plans)}\n\nبرای مدیریت هر پلن روی آن بزنید 👇"
+    text = f"🗂 {cat['name']}\n\n📦 تعداد پلن: {len(plans)}\n\nبرای مدیریت هر ��لن روی آن بزنید 👇"
     await callback.message.edit_text(text, reply_markup=admin_vip_category_detail_keyboard(category_key))
     await callback.answer()
 
@@ -6486,7 +6536,7 @@ async def admin_panel_choose_open_msg(message: types.Message):
 # ---------------------------------------------------------------------------
 def _health_report_text() -> str:
     import platform
-    lines = ["🩺 سلامت ربات", ""]
+    lines = ["🩺 سلا��ت ربات", ""]
     try:
         cur = db.get_connection().cursor()
         cur.execute("SELECT 1")
@@ -6574,7 +6624,7 @@ async def admin_cache_cb(callback: types.CallbackQuery):
 @router.callback_query(F.data == "cache_clear_do")
 async def admin_cache_clear(callback: types.CallbackQuery):
     if not _admin_perm(callback.from_user.id, "health"):
-        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        await callback.answer("�� دسترسی ندارید.", show_alert=True)
         return
     cache.clear_all()
     await callback.message.edit_text(_cache_status_text(), reply_markup=admin_cache_keyboard())
@@ -7568,7 +7618,7 @@ async def admin_vip_move_toggle_all(callback: types.CallbackQuery, state: FSMCon
 @router.callback_query(F.data == "vipmvgo")
 async def admin_vip_move_go(callback: types.CallbackQuery, state: FSMContext):
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        await callback.answer("⛔ دستر��ی ندارید.", show_alert=True)
         return
     data = await state.get_data()
     if data.get("vip_mv_mode") != "plans" or not data.get("vip_mv_items"):
@@ -7616,7 +7666,7 @@ async def admin_vip_move_browse(callback: types.CallbackQuery, state: FSMContext
         return
     data = await state.get_data()
     if data.get("vip_mv_mode") not in ("plans", "folder") or not data.get("vip_mv_items"):
-        await callback.answer("⚠️ این صفحه منقضی شده؛ دوباره از ��ول شروع کنید.", show_alert=True)
+        await callback.answer("⚠️ این صفحه منقضی شده؛ دوباره از ����ل شروع کنید.", show_alert=True)
         return
     token = callback.data.replace("vipmvdst_", "")
     if token != "root" and _vip_token_to_cat(token) is None:
@@ -7871,7 +7921,7 @@ async def admin_free_test_panel_delete(callback: types.CallbackQuery):
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 💱 CRYPTO BACKUP PRICE HANDLERS — بند ۲۳
-# ═══════════════════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════��════��════════════════════════════
 
 @router.callback_query(F.data.startswith("crypto_backup_price_"))
 async def admin_crypto_backup_price_start(callback: types.CallbackQuery, state: FSMContext):
@@ -7887,7 +7937,7 @@ async def admin_crypto_backup_price_start(callback: types.CallbackQuery, state: 
     await callback.message.edit_text(
         f"💱 قیمت Backup ارز {symbol}\n\n"
         f"قیمت فعلی: {price_txt}\n\n"
-        "قیمت جدید را به تومان وارد کنید:",
+        "قیمت جدید را به تومان وارد کن��د:",
         reply_markup=admin_crypto_backup_keyboard(symbol, current, enabled),
     )
     await callback.answer()
@@ -8022,3 +8072,251 @@ async def admin_payg_price_set(message: types.Message, state: FSMContext):
     else:
         await message.answer("❌ خطای داخلی: مختصات مکالمه یافت نشد.")
     await state.clear()
+
+
+# ===========================================================================
+# بند ۱۳ — Rich Text Template Manager
+# ===========================================================================
+from keyboards import (
+    admin_rich_text_list_keyboard,
+    admin_rich_text_detail_keyboard,
+    admin_rich_text_confirm_del_keyboard,
+)
+
+
+@router.callback_query(F.data == "rt_list")
+async def admin_rt_list(callback: types.CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    await state.clear()
+    templates = db.get_rich_text_templates()
+    count = len(templates)
+    await callback.message.edit_text(
+        f"📝 قالب‌های Rich Text\n\n"
+        f"تعداد: {count} قالب\n\n"
+        "روی هر قالب بزنید تا ویرایش یا حذف کنید 👇",
+        reply_markup=admin_rich_text_list_keyboard(templates),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "rt_new")
+async def admin_rt_new_start(callback: types.CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    await state.set_state(AdminStates.waiting_rt_label)
+    await callback.message.edit_text(
+        "📝 قالب جدید — مرحله ۱ از ۲\n\n"
+        "برچسب شناسایى برای این قالب بفرستید:\n\n"
+        "(مثال: «پیام خوشآمدگویی»)",
+    )
+    await callback.answer()
+
+
+@router.message(AdminStates.waiting_rt_label)
+async def admin_rt_new_label(message: types.Message, state: FSMContext):
+    if not _is_admin(message.from_user.id):
+        return
+    label = (message.text or "").strip()
+    if not label:
+        await message.answer("❌ برچسب نمی‌تواند خالی باشد.")
+        return
+    await state.update_data(rt_label=label)
+    await state.set_state(AdminStates.waiting_rt_content)
+    await message.answer(
+        f"📝 قالب جدید — مرحله ۲ از ۲\n\n"
+        f"برچسب: {label}\n\n"
+        "متن کامل قالب را اینجا بفرستید.\n"
+        "می‌توانید از Markdown یا HTML استفاده کنید.\n"
+        "ایموجی‌های Premium خودبهخود ذخیره خواهند شد."
+    )
+
+
+@router.message(AdminStates.waiting_rt_content)
+async def admin_rt_new_content(message: types.Message, state: FSMContext):
+    if not _is_admin(message.from_user.id):
+        return
+    content = (message.text or message.caption or "").strip()
+    if not content:
+        await message.answer("❌ متن نمی‌تواند خالی باشد.")
+        return
+    data = await state.get_data()
+    label = data.get('rt_label', 'قالب جدید')
+    # ذخیره Custom Emoji اگر وجود داشت
+    _save_dynamic_premium_emoji(label, message)
+    template = db.create_rich_text_template(label, content)
+    await state.clear()
+    await message.answer(
+        f"✅ قالب «{label}» با شناسهٔ {template['id']} ذخیره شد!",
+        reply_markup=admin_rich_text_detail_keyboard(template['id']),
+    )
+
+
+@router.callback_query(F.data.startswith("rt_open_"))
+async def admin_rt_open(callback: types.CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    await state.clear()
+    try:
+        tid = int(callback.data.replace("rt_open_", ""))
+    except ValueError:
+        await callback.answer("❌ ID نامعتبر", show_alert=True)
+        return
+    t = db.get_rich_text_template(tid)
+    if t is None:
+        await callback.answer("❌ قالب یافت نشد.", show_alert=True)
+        return
+    preview = (t['content'] or '')[:200]
+    await callback.message.edit_text(
+        f"📄 {t['label']}\n\n"
+        f"🆔 ID: {t['id']}\n"
+        f"📅 ساخته: {t.get('created_at', '')[:10]}\n\n"
+        f"📝 پیشنمایش:\n{preview}{'...' if len(t['content']) > 200 else ''}",
+        reply_markup=admin_rich_text_detail_keyboard(tid),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("rt_edit_"))
+async def admin_rt_edit_start(callback: types.CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    try:
+        tid = int(callback.data.replace("rt_edit_", ""))
+    except ValueError:
+        await callback.answer("❌", show_alert=True)
+        return
+    t = db.get_rich_text_template(tid)
+    if t is None:
+        await callback.answer("❌ قالب یافت نشد.", show_alert=True)
+        return
+    await state.update_data(rt_edit_id=tid)
+    await state.set_state(AdminStates.waiting_rt_content)
+    await callback.message.edit_text(
+        f"✏️ ویرایش متن قالب «{t['label']}»\n\n"
+        "متن جدید را بفرستید:"
+    )
+    await callback.answer()
+
+
+@router.message(AdminStates.waiting_rt_content)
+async def admin_rt_save_content(message: types.Message, state: FSMContext):
+    if not _is_admin(message.from_user.id):
+        return
+    data = await state.get_data()
+    edit_id = data.get('rt_edit_id')
+    content = (message.text or message.caption or "").strip()
+    if not content:
+        await message.answer("❌ متن نمی‌تواند خالی باشد.")
+        return
+    if edit_id:
+        db.update_rich_text_template(edit_id, content=content)
+        await state.clear()
+        await message.answer("✅ متن قالب به‌روز شد.", reply_markup=admin_rich_text_detail_keyboard(edit_id))
+    else:
+        # ادامه ایجاد قالب جدید
+        label = data.get('rt_label', 'قالب جدید')
+        _save_dynamic_premium_emoji(label, message)
+        template = db.create_rich_text_template(label, content)
+        await state.clear()
+        await message.answer(
+            f"✅ قالب «{label}» با شناسهٔ {template['id']} ذخیره شد!",
+            reply_markup=admin_rich_text_detail_keyboard(template['id']),
+        )
+
+
+@router.callback_query(F.data.startswith("rt_relabel_"))
+async def admin_rt_relabel_start(callback: types.CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    try:
+        tid = int(callback.data.replace("rt_relabel_", ""))
+    except ValueError:
+        await callback.answer("❌", show_alert=True)
+        return
+    t = db.get_rich_text_template(tid)
+    if t is None:
+        await callback.answer("❌ قالب یافت نشد.", show_alert=True)
+        return
+    await state.update_data(rt_edit_id=tid)
+    await state.set_state(AdminStates.waiting_rt_label)
+    await callback.message.edit_text(
+        f"🏷 ویرایش برچسب قالب «{t['label']}»\n\n"
+        "برچسب جدید را بفرستید:"
+    )
+    await callback.answer()
+
+
+@router.message(AdminStates.waiting_rt_label)
+async def admin_rt_save_label(message: types.Message, state: FSMContext):
+    if not _is_admin(message.from_user.id):
+        return
+    label = (message.text or "").strip()
+    if not label:
+        await message.answer("❌ برچسب نمی‌تواند خالی باشد.")
+        return
+    data = await state.get_data()
+    edit_id = data.get('rt_edit_id')
+    if edit_id:
+        db.update_rich_text_template(edit_id, label=label)
+        await state.clear()
+        await message.answer("✅ برچسب قالب به‌روز شد.", reply_markup=admin_rich_text_detail_keyboard(edit_id))
+    else:
+        # مرحله اول ایجاد قالب
+        await state.update_data(rt_label=label)
+        await state.set_state(AdminStates.waiting_rt_content)
+        await message.answer(
+            f"📝 قالب جدید — مرحله ۲ از ۲\n\n"
+            f"برچسب: {label}\n\n"
+            "متن کامل قالب را بفرستید:"
+        )
+
+
+@router.callback_query(F.data.startswith("rt_del_"))
+async def admin_rt_delete_ask(callback: types.CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    try:
+        tid = int(callback.data.replace("rt_del_", ""))
+    except ValueError:
+        await callback.answer("❌", show_alert=True)
+        return
+    t = db.get_rich_text_template(tid)
+    if t is None:
+        await callback.answer("❌ قالب یافت نشد.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        f"🗑 حذف قالب «{t['label']}»\n\n"
+        "آیا مطمئن هستید که می‌خواهید این قالب را حذف کنید?",
+        reply_markup=admin_rich_text_confirm_del_keyboard(tid),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("rt_delconfirm_"))
+async def admin_rt_delete_confirm(callback: types.CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    try:
+        tid = int(callback.data.replace("rt_delconfirm_", ""))
+    except ValueError:
+        await callback.answer("❌", show_alert=True)
+        return
+    ok = db.delete_rich_text_template(tid)
+    if ok:
+        await callback.answer("✅ قالب حذف شد.")
+        templates = db.get_rich_text_templates()
+        await callback.message.edit_text(
+            f"📝 قالب‌های Rich Text\n\n"
+            f"تعداد: {len(templates)} قالب",
+            reply_markup=admin_rich_text_list_keyboard(templates),
+        )
+    else:
+        await callback.answer("❌ عملیات ناموفق بود.", show_alert=True)
