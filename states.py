@@ -200,5 +200,5 @@ class AdminStates(StatesGroup):
 
     # 🖥 Mini App URL
     waiting_miniapp_url = State()
-    waiting_crypto_wallet_edit = auto()
-    waiting_crypto_backup_price = auto()
+    waiting_crypto_wallet_edit = State()
+    waiting_crypto_backup_price = State()
