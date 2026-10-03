@@ -127,6 +127,17 @@ from keyboards import (
     admin_crypto_list_menu, admin_card_info_menu, admin_wallet_info_menu,
 )
 
+from keyboards import (
+    admin_gift_audience_keyboard,
+    admin_gift_all_confirm_keyboard,
+    admin_payg_category_pricing_keyboard,
+    admin_payg_plan_pricing_keyboard,
+    admin_payg_pricing_mode_keyboard,
+    admin_free_test_panels_keyboard,
+    admin_free_test_panel_detail_keyboard,
+    admin_crypto_backup_keyboard,
+)
+
 plan_type = db.plan_type  # نسخه‌ی DB-aware (دسته‌بندی‌های VIP را هم می‌شناسد)
 
 import ui_editor as _ui_editor
@@ -1614,7 +1625,7 @@ async def send_config_qr_wrong_format(message: types.Message):
 async def send_config_link_received(message: types.Message, state: FSMContext):
     sub_link = (message.text or "").strip()
     if not sub_link.lower().startswith(("http://", "https://")):
-        await message.answer("❌ این یک لینک معتبر نیست؛ لطفاً لینک ساب رو با http یا https ارسال کن:")
+        await message.answer("❌ این یک لینک معتبر ن��ست؛ لطفاً لینک ساب رو با http یا https ارسال کن:")
         return
 
     data = await state.get_data()
@@ -1833,7 +1844,7 @@ def _text_manager_keyboard(category: str | None = None):
     delivery_labels = {
         "service_delivery_text": "✏️ تغییر متن تحویل سرویس (بسته‌ها)",
         "service_delivery_apps_button": "📱 دکمه لینک برنامه‌ها (بسته‌ها)",
-        "service_delivery_connection_button": "🔧 دکمه اتصال کانفینگ (بسته‌ها)",
+        "service_delivery_connection_button": "��� دکمه اتصال کانفینگ (بسته‌ها)",
         "service_delivery_test_text": "✏️ تغییر متن تحویل سرویس (تست)",
         "service_delivery_test_apps_button": "📱 دکمه لینک برنامه‌ها (تست)",
         "service_delivery_test_connection_button": "🔧 دکمه اتصال کانفینگ (تست)",
@@ -2563,7 +2574,7 @@ async def admin_text_edit_save(message: types.Message, state: FSMContext):
     await message.answer("✅ متن ذخیره شد.", reply_markup=_text_manager_keyboard(category))
 
 
-# 📥 صف سفارشات — لیست خریدهای تأییدشده‌ای که هنوز کانفیگ‌شان ارسال نشده،
+# 📥 صف سفارشات — لیست خریدهای تأییدشده‌ای که هنوز کانفیگ‌��ان ارسال نشده،
 # چه خرید پلن معمولی (VIP/گیمینگ) و چه سفارش سفارشی/تمدید.
 # ---------------------------------------------------------------------------
 @router.callback_query(F.data == "admin_orders_off")
@@ -3975,7 +3986,7 @@ async def admin_referrer_detail(callback: types.CallbackQuery):
 # خودکار با درصد تعیین‌شده تخفیف می‌خورد (بدون نیاز به وارد کردن کد تخفیف).
 # ---------------------------------------------------------------------------
 def _user_detail_text(user: dict) -> str:
-    """همان متن استاندارد صفحه‌ی «مدیریت کاربر» (بخش کاربران)؛ برای اینکه صفحه‌ی
+    """همان متن استاندا��د صفحه‌ی «مدیریت کاربر» (بخش کاربران)؛ برای اینکه صفحه‌ی
     نماینده هم دقیقاً همین محیط را نشان دهد، این تابع مشترک استفاده می‌شود."""
     stats = db.get_referral_stats(user["id"])
     return (
@@ -4709,10 +4720,11 @@ async def admin_broadcast_pick_audience(callback: types.CallbackQuery, state: FS
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
     audience = callback.data.replace("bcaud_", "")
-    if audience not in ("all", "buyers", "non_buyers"):
+    from database import AUDIENCE_LABELS
+    if audience not in AUDIENCE_LABELS:
         await callback.answer("❌ گزینه نامعتبر.", show_alert=True)
         return
-    label = {"all": "همه‌ی کاربران", "buyers": "فقط کسانی که خرید کرده‌اند", "non_buyers": "فقط کسانی که خرید نکرده‌اند"}[audience]
+    label = AUDIENCE_LABELS[audience]
     count = len(db.get_broadcastable_users(audience))
     await state.update_data(broadcast_audience=audience)
     await state.set_state(UserStates.waiting_broadcast)
@@ -4881,10 +4893,10 @@ async def admin_gift_all_start(callback: types.CallbackQuery, state: FSMContext)
     if not _is_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
-    await state.set_state(AdminStates.waiting_gift_all_amount)
-    await callback.message.answer(
-        "🎁 هدیه همگانی\n\nمبلغی که می‌خواهی به کیف پول *همه‌ی* کاربران اضافه شود را به تومان بفرست:",
-        parse_mode="Markdown",
+    await state.clear()
+    await callback.message.edit_text(
+        "🎁 هدیه هدف‌مند\n\nاین هدیه برای چه گروهی از کاربران باشد؟",
+        reply_markup=admin_gift_audience_keyboard(),
     )
     await callback.answer()
 
@@ -4900,22 +4912,66 @@ async def admin_gift_all_amount(message: types.Message, state: FSMContext):
     except Exception:
         await message.answer("❌ فقط یک عدد مثبت بفرست:")
         return
+    data = await state.get_data()
+    audience = data.get("gift_audience", "all")
     await state.update_data(gift_amount=amount)
-    await state.clear()
-    count = db.count_unblocked_users()
+    from database import AUDIENCE_LABELS
+    label = AUDIENCE_LABELS.get(audience, audience)
+    count = len(db.get_broadcastable_users(audience))
     await message.answer(
-        f"⚠️ مطمئنی می‌خوای {amount:,} تومان به کیف پول {count:,} کاربر اضافه بشه؟\n\n"
-        "این کار برگشت‌پذیر نیست.",
-        reply_markup=admin_gift_all_confirm_keyboard(amount),
+        f"🎁 تأیید هدیه\n\n"
+        f"💰 مبلغ: {amount:,} تومان\n"
+        f"👥 مخاطب: {label} ({count:,} نفر)\n\n"
+        "آیا مطمئن هستید؟",
+        reply_markup=admin_gift_all_confirm_keyboard(amount, audience),
     )
 
 
 @router.callback_query(F.data.startswith("giftall_do_"))
-async def admin_gift_all_confirm(callback: types.CallbackQuery):
+async def admin_gift_all_confirm_legacy(callback: types.CallbackQuery):
+    """Legacy handler for old giftall_do_<amount> callback (backwards compat)."""
     if not _is_admin(callback.from_user.id):
         await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
         return
     amount = int(callback.data.replace("giftall_do_", ""))
+    await callback.message.edit_text("⏳ در حال واریز هدیه...")
+    try:
+        count = db.gift_all_users(amount, audience="all")
+    except Exception:
+        logger.exception("هدیه ناموفق")
+        await callback.message.edit_text("❌ واریز هدیه ناموفق بود؛ هیچ مبلغی واریز نشد.")
+        await callback.answer()
+        return
+
+
+@router.callback_query(F.data.startswith("giftdo_"))
+async def admin_gift_targeted_confirm(callback: types.CallbackQuery):
+    """تأیید هدیه هدف‌مند — callback: giftdo_<amount>_<audience>."""
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    parts = callback.data.replace("giftdo_", "").split("_", 1)
+    if len(parts) != 2:
+        await callback.answer("❌ داده نامعتبر", show_alert=True)
+        return
+    amount = int(parts[0])
+    audience = parts[1]
+    from database import AUDIENCE_LABELS
+    label = AUDIENCE_LABELS.get(audience, audience)
+    await callback.message.edit_text(f"⏳ در حال واریز {amount:,} تومان به {label}...")
+    try:
+        count = db.gift_all_users(amount, description=f"🎁 هدیه ادمین", audience=audience)
+        await callback.message.edit_text(
+            f"✅ {amount:,} تومان به {count:,} کاربر ({label}) واریز شد."
+        )
+    except Exception:
+        logger.exception("هدیه هدف‌مند ناموفق")
+        await callback.message.edit_text("❌ واریز هدیه ناموفق بود.")
+    await callback.answer()
+
+
+# dummy old confirm block replaced above
+async def _admin_gift_all_confirm_block(callback, amount):
     await callback.message.edit_text("⏳ در حال واریز هدیه به کیف پول کاربران...")
     try:
         count = db.gift_all_users(amount)
@@ -6737,6 +6793,7 @@ async def admin_payment_methods_open(callback: types.CallbackQuery):
     )
     from keyboards import admin_payg_menu
     s_payg = db.get_payg_settings()
+
     await callback.message.edit_text(text, reply_markup=admin_payment_methods_menu(payg=s_payg))
     await callback.answer()
 
@@ -6792,7 +6849,7 @@ async def admin_miniapp_open_handler(callback: types.CallbackQuery):
         return
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
     # بند ۸: آدرس مینی اپ را از یوزرنیم ربات می‌سازیم
-    _bot_username = bot_info.get("bot_username") or ""
+    _bot_username = (bot_info.get("bot_username") or db.get_setting("bot_username", "") or getattr(__import__("config"), "BOT_USERNAME", "")) or ""
     if not _bot_username:
         await callback.answer(
             "❌ یوزرنیم ربات تنظیم نشده. ابتدا در \u2018تنظیمات ربات\u2019 یوزرنیم را وارد کنید.",
@@ -7559,7 +7616,7 @@ async def admin_vip_move_browse(callback: types.CallbackQuery, state: FSMContext
         return
     data = await state.get_data()
     if data.get("vip_mv_mode") not in ("plans", "folder") or not data.get("vip_mv_items"):
-        await callback.answer("⚠️ این صفحه منقضی شده؛ دوباره از اول شروع کنید.", show_alert=True)
+        await callback.answer("⚠️ این صفحه منقضی شده؛ دوباره از ��ول شروع کنید.", show_alert=True)
         return
     token = callback.data.replace("vipmvdst_", "")
     if token != "root" and _vip_token_to_cat(token) is None:
@@ -7722,3 +7779,246 @@ async def admin_premium_emoji_forward(callback: types.CallbackQuery):
         await callback.answer("✅ ارسال شد.", show_alert=True)
     except Exception as e:
         await callback.answer(f"❌ خطا: {e}", show_alert=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 🎁 FREE TEST PANELS — بند ۱۴
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.callback_query(F.data == "ftpanel_list")
+async def admin_free_test_panel_list(callback: types.CallbackQuery, state: FSMContext):
+    """لیست پنل‌های تست چندگانه."""
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    await state.clear()
+    panels = db.get_free_test_panels()
+    await callback.message.edit_text(
+        f"🎁 مدیریت پنل‌های تست\n\nتعداد پنل‌ها: {len(panels)}",
+        reply_markup=admin_free_test_panels_keyboard(panels),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("ftpanel_open_"))
+async def admin_free_test_panel_detail(callback: types.CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    panel_id = callback.data.replace("ftpanel_open_", "")
+    panels = db.get_free_test_panels()
+    p = next((x for x in panels if x.get("id") == panel_id), None)
+    if not p:
+        await callback.answer("❌ پنل یافت نشد", show_alert=True)
+        return
+    enabled = p.get("enabled", True)
+    st = "🟢 فعال" if enabled else "🔴 غیرفعال"
+    vol = p.get('volume_gb', 0)
+    days = p.get('days', 0)
+    price = p.get('price', 0)
+    text = (
+        f"🖥 پنل تست: {p['name']}\n\n"
+        f"💾 حجم: {vol} GB\n"
+        f"⏰ مدت: {days} روز\n"
+        f"💰 قیمت: {price:,} تومان\n"
+        f"📊 وضعیت: {st}"
+    )
+    await callback.message.edit_text(
+        text,
+        reply_markup=admin_free_test_panel_detail_keyboard(panel_id, enabled),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("ftpanel_toggle_"))
+async def admin_free_test_panel_toggle(callback: types.CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    panel_id = callback.data.replace("ftpanel_toggle_", "")
+    new_state = db.toggle_free_test_panel(panel_id)
+    if new_state is None:
+        await callback.answer("❌ پنل یافت نشد", show_alert=True)
+        return
+    await callback.answer(f"پنل {'✅ فعال' if new_state else '❌ غیرفعال'} شد")
+    # Refresh detail view
+    panels = db.get_free_test_panels()
+    p = next((x for x in panels if x.get("id") == panel_id), None)
+    if not p:
+        return
+    await callback.message.edit_reply_markup(
+        reply_markup=admin_free_test_panel_detail_keyboard(panel_id, p.get("enabled", True))
+    )
+
+
+@router.callback_query(F.data.startswith("ftpanel_del_"))
+async def admin_free_test_panel_delete(callback: types.CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    panel_id = callback.data.replace("ftpanel_del_", "")
+    ok = db.remove_free_test_panel(panel_id)
+    if ok:
+        await callback.answer("✅ پنل حذف شد")
+        panels = db.get_free_test_panels()
+        await callback.message.edit_text(
+            f"🎁 مدیریت پنل‌های تست\n\nتعداد: {len(panels)}",
+            reply_markup=admin_free_test_panels_keyboard(panels),
+        )
+    else:
+        await callback.answer("❌ پنل یافت نشد", show_alert=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 💱 CRYPTO BACKUP PRICE HANDLERS — بند ۲۳
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.callback_query(F.data.startswith("crypto_backup_price_"))
+async def admin_crypto_backup_price_start(callback: types.CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    symbol = callback.data.replace("crypto_backup_price_", "")
+    await state.update_data(crypto_backup_symbol=symbol)
+    await state.set_state(AdminStates.waiting_crypto_wallet)
+    current = db.get_crypto_backup_price(symbol)
+    enabled = db.get_crypto_backup_enabled(symbol)
+    price_txt = f"{current:,.0f} تومان" if current else "تنظیم نشده"
+    await callback.message.edit_text(
+        f"💱 قیمت Backup ارز {symbol}\n\n"
+        f"قیمت فعلی: {price_txt}\n\n"
+        "قیمت جدید را به تومان وارد کنید:",
+        reply_markup=admin_crypto_backup_keyboard(symbol, current, enabled),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("crypto_backup_toggle_"))
+async def admin_crypto_backup_toggle(callback: types.CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    symbol = callback.data.replace("crypto_backup_toggle_", "")
+    current = db.get_crypto_backup_enabled(symbol)
+    db.set_crypto_backup_enabled(symbol, not current)
+    new_st = not current
+    await callback.answer(f"Fallback {symbol}: {'✅ فعال' if new_st else '❌ غیرفعال'}")
+    current_price = db.get_crypto_backup_price(symbol)
+    await callback.message.edit_reply_markup(
+        reply_markup=admin_crypto_backup_keyboard(symbol, current_price, new_st)
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ⚡ PAYG CATEGORY/PLAN PRICE HANDLERS — بند ۷
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.callback_query(F.data == "payg_price_mode")
+async def admin_payg_price_mode_open(callback: types.CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    await callback.message.edit_text(
+        "⚡ روش قیمت‌گذاری Pay As You Go\n\n"
+        "اولویت: پلن > دسته‌بندی > عمومی",
+        reply_markup=admin_payg_pricing_mode_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "payg_price_by_category")
+async def admin_payg_price_by_category_open(callback: types.CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    cats = db.get_vip_categories() if hasattr(db, 'get_vip_categories') else []
+    await callback.message.edit_text(
+        "⚡ قیمت PAYG بر اساس دسته‌بندی:",
+        reply_markup=admin_payg_category_pricing_keyboard(cats),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("payg_catprice_"))
+async def admin_payg_catprice_start(callback: types.CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    try:
+        cat_id = int(callback.data.replace("payg_catprice_", ""))
+    except ValueError:
+        await callback.answer("❌ ID نامعتبر", show_alert=True)
+        return
+    cats = db.get_vip_categories() if hasattr(db, 'get_vip_categories') else []
+    cat = next((c for c in cats if (c.get('id') or c.get('category_id')) == cat_id), {})
+    await state.update_data(payg_cat_id=cat_id)
+    await state.set_state(AdminStates.waiting_payg_price_per_gb)
+    current = db.get_payg_category_price(cat_id)
+    cur_txt = f"{current:,} ت/GB" if current else "عمومی"
+    await callback.message.edit_text(
+        f"⚡ PAYG دسته: {cat.get('name', cat_id)}\nفعلی: {cur_txt}\n\nقیمت جدید وارد کن (0 = عمومی):",
+        reply_markup=admin_back_button(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "payg_price_by_plan")
+async def admin_payg_price_by_plan_open(callback: types.CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    plans = []
+    if hasattr(db, 'get_all_vip_plans_flat'):
+        raw = db.get_all_vip_plans_flat()
+        plans = list(raw.values()) if isinstance(raw, dict) else raw
+    await callback.message.edit_text(
+        "⚡ قیمت PAYG بر اساس پلن:",
+        reply_markup=admin_payg_plan_pricing_keyboard(plans),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("payg_planprice_"))
+async def admin_payg_planprice_start(callback: types.CallbackQuery, state: FSMContext):
+    if not _is_admin(callback.from_user.id):
+        await callback.answer("⛔", show_alert=True)
+        return
+    plan_key = callback.data.replace("payg_planprice_", "")
+    plan = {}
+    if hasattr(db, 'get_vip_plan'):
+        plan = db.get_vip_plan(plan_key) or {}
+    await state.update_data(payg_plan_key=plan_key)
+    await state.set_state(AdminStates.waiting_payg_price_per_gb)
+    current = db.get_payg_plan_price(plan_key)
+    cur_txt = f"{current:,} ت/GB" if current else "از دسته‌بندی"
+    await callback.message.edit_text(
+        f"⚡ PAYG پلن: {plan.get('name', plan_key)}\nفعلی: {cur_txt}\n\nقیمت جدید وارد کن (0 = دسته‌بندی):",
+        reply_markup=admin_back_button(),
+    )
+    await callback.answer()
+
+
+@router.message(AdminStates.waiting_payg_price_per_gb)
+async def admin_payg_price_set(message: types.Message, state: FSMContext):
+    """Handler مشترک برای تنظیم قیمت PAYG بر اساس دسته/پلن."""
+    if not _is_admin(message.from_user.id):
+        return
+    try:
+        price = int((message.text or "").replace(",", "").replace("،", "").strip())
+        if price < 0:
+            raise ValueError
+    except Exception:
+        await message.answer("❌ فقط عدد صحیح وارد کنید:")
+        return
+    data = await state.get_data()
+    cat_id = data.get('payg_cat_id')
+    plan_key = data.get('payg_plan_key')
+    if cat_id is not None:
+        db.set_payg_category_price(cat_id, price)
+        await message.answer(f"✅ قیمت PAYG دسته به {price:,} ت/GB تنظیم شد.")
+    elif plan_key:
+        db.set_payg_plan_price(plan_key, price)
+        await message.answer(f"✅ قیمت PAYG پلن به {price:,} ت/GB تنظیم شد.")
+    else:
+        await message.answer("❌ خطای داخلی: مختصات مکالمه یافت نشد.")
+    await state.clear()
