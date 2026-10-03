@@ -4268,7 +4268,7 @@ async def admin_agent_edit_percent_apply(message: types.Message, state: FSMConte
     percent = int(clean_numeric_id(message.text))
     db.add_agent(tid, percent, agent.get("note"))
     await message.answer(
-        f"✅ درصد تخفیف نماینده به‌روزرسانی شد:\n🆔 {tid}\n💯 {percent}٪",
+        f"✅ درصد تخفیف نماینده به‌روزر��انی شد:\n🆔 {tid}\n💯 {percent}٪",
         reply_markup=admin_agent_actions_keyboard(tid),
     )
     await state.clear()
@@ -4430,7 +4430,7 @@ async def admin_vip_category_detail(callback: types.CallbackQuery):
         await callback.answer("❌ این دسته یافت نشد.", show_alert=True)
         return
     plans = db.get_vip_plans(cat["id"])
-    text = f"🗂 {cat['name']}\n\n📦 تعداد پلن: {len(plans)}\n\nبرای مدیریت هر ��لن روی آن بزنید 👇"
+    text = f"🗂 {cat['name']}\n\n📦 تعداد پلن: {len(plans)}\n\n��رای مدیریت هر ��لن روی آن بزنید 👇"
     await callback.message.edit_text(text, reply_markup=admin_vip_category_detail_keyboard(category_key))
     await callback.answer()
 
@@ -5110,7 +5110,7 @@ def _guide_detail_text_and_entities(guide: dict):
             if span:
                 entities.append(types.MessageEntity(type="custom_emoji", offset=3, length=span, custom_emoji_id=str(emoji_id)))
     except Exception:
-        logger.exception("بازسازی Premium Emoji عنوان راهنما ناموفق بود")
+        logger.exception("بازسازی Premium Emoji عنوان راهنما ��اموفق بود")
 
     if body:
         shift = telegram_utf16_length(prefix + "\n\n")
@@ -6844,7 +6844,7 @@ async def admin_payment_methods_open(callback: types.CallbackQuery):
     from keyboards import admin_payg_menu
     s_payg = db.get_payg_settings()
 
-    await callback.message.edit_text(text, reply_markup=admin_payment_methods_menu(payg=s_payg))
+    await callback.message.edit_text(text, reply_markup=admin_payment_methods_menu())
     await callback.answer()
 
 
@@ -7921,7 +7921,7 @@ async def admin_free_test_panel_delete(callback: types.CallbackQuery):
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 💱 CRYPTO BACKUP PRICE HANDLERS — بند ۲۳
-# ═════════════════════════════════════════════��════��════════════════════════════
+# ═══════════════════════════════��═════════════��════��════════════════════════════
 
 @router.callback_query(F.data.startswith("crypto_backup_price_"))
 async def admin_crypto_backup_price_start(callback: types.CallbackQuery, state: FSMContext):
@@ -7937,7 +7937,7 @@ async def admin_crypto_backup_price_start(callback: types.CallbackQuery, state: 
     await callback.message.edit_text(
         f"💱 قیمت Backup ارز {symbol}\n\n"
         f"قیمت فعلی: {price_txt}\n\n"
-        "قیمت جدید را به تومان وارد کن��د:",
+        "قیمت ج��ید را به تومان وارد کن��د:",
         reply_markup=admin_crypto_backup_keyboard(symbol, current, enabled),
     )
     await callback.answer()
