@@ -193,3 +193,7 @@ class AdminStates(StatesGroup):
     waiting_free_test_panel_volume = State()
     waiting_free_test_panel_days = State()
     waiting_free_test_panel_name = State()
+
+    # 📝 Rich Text Template Manager (بند ۱۳)
+    waiting_rt_label   = State()   # مرحله ۱: برچسب قالب
+    waiting_rt_content = State()   # مرحله ۲: متن کامل قالب
