@@ -8009,10 +8009,10 @@ async def paymt_uniquepay_open(callback: types.CallbackQuery):
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=("❌ غیرفعال کردن" if u.enabled else "✅ فعال کردن"), callback_data="paymt_uniquepay_toggle", style="primary")],
-        [InlineKeyboardButton(text="🔐 Business Token", callback_data="paymt_uniquepay_token", style="secondary"),
-         InlineKeyboardButton(text="🔁 Redirect URL", callback_data="paymt_uniquepay_redirect", style="secondary")],
-        [InlineKeyboardButton(text="📡 Callback URL", callback_data="paymt_uniquepay_callback", style="secondary"),
-         InlineKeyboardButton(text="💰 حداقل مبلغ", callback_data="paymt_uniquepay_min_amount", style="secondary")],
+        [InlineKeyboardButton(text="🔐 Business Token", callback_data="paymt_uniquepay_token", style="primary"),
+         InlineKeyboardButton(text="🔁 Redirect URL", callback_data="paymt_uniquepay_redirect", style="primary")],
+        [InlineKeyboardButton(text="📡 Callback URL", callback_data="paymt_uniquepay_callback", style="primary"),
+         InlineKeyboardButton(text="💰 حداقل مبلغ", callback_data="paymt_uniquepay_min_amount", style="primary")],
         [InlineKeyboardButton(text=("🤖 پرداخت داخل تلگرام ✅" if u.use_telegram_link else "🌐 WhiteLabel/وب"), callback_data="paymt_uniquepay_mode", style="success")],
         [InlineKeyboardButton(text="🔙 بازگشت", callback_data="admin_payment_methods", style="danger")],
     ])
@@ -8366,6 +8366,8 @@ async def admin_category_dispatch(message: types.Message, state: FSMContext):
         return
     try:
         kb = kb_fn()
-    except Exception:
-        kb = None
-    await message.answer(label, reply_markup=kb)
+    except Exception as e:
+        logging.exception("admin category keyboard build failed: %s", e)
+        await message.answer("❌ ساخت منوی این بخش با خطا روبه‌رو شد. لاگ را بررسی کن.")
+        return
+    await message.answer(f"📂 {label}\n\nیکی از گزینه‌های زیر را انتخاب کنید:", reply_markup=kb)
