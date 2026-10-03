@@ -13,19 +13,6 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # ================================================================
-# ارزهای پیش‌فرض — به دادهبان گفته می‌شود اگر ارز در DB نباشد
-# ================================================================
-# فقط ارزهای TRX و TON به‌صورت پیش‌فرض فعال هستند.
-# هر ارز دیگری قابل افزودن از پنل ادمین است (با تشخیص قیمت خودکار).
-DEFAULT_CRYPTOS = [
-    CryptoConfig(symbol="TRX", name="ترون", network="TRC20", emoji="🟣",
-                 enabled=True, wallet="", margin_percent=3.0, min_amount_toman=50000, backup_price=None),
-    CryptoConfig(symbol="TON", name="تون", network="TON", emoji="💎",
-                 enabled=True, wallet="", margin_percent=3.0, min_amount_toman=50000, backup_price=None),
-]
-
-
-# ================================================================
 # Data classes
 # ================================================================
 
@@ -48,6 +35,17 @@ class CryptoConfig:
     @classmethod
     def from_dict(cls, d: dict) -> "CryptoConfig":
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+
+
+# ================================================================
+# ارزهای پیش‌فرض (تعریف بعد از کلاس CryptoConfig)
+# ================================================================
+DEFAULT_CRYPTOS = [
+    CryptoConfig(symbol="TRX", name="ترون", network="TRC20", emoji="🟣",
+                 enabled=True, wallet="", margin_percent=3.0, min_amount_toman=50000, backup_price=None),
+    CryptoConfig(symbol="TON", name="تون", network="TON", emoji="💎",
+                 enabled=True, wallet="", margin_percent=3.0, min_amount_toman=50000, backup_price=None),
+]
 
 
 @dataclass
